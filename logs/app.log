@@ -1,0 +1,39 @@
+2026-03-17 19:58:07,924 | INFO | config.logging_config | logging_config.py:64 | Logging initialized. Level=INFO, File=logs/app.log
+2026-03-17 19:58:07,924 | INFO | __main__ | app.py:72 | Initializing application...
+2026-03-17 19:58:07,924 | INFO | __main__ | app.py:29 | Starting GaragePulse v1.0.0
+2026-03-17 19:58:08,120 | ERROR | database.connection | connection.py:46 | Failed to initialize MySQL pool: 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)
+2026-03-17 19:58:08,120 | ERROR | __main__ | app.py:40 | Failed to initialize application: 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)
+Traceback (most recent call last):
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\connection_cext.py", line 334, in _open_connection
+    self._cmysql.connect(**cnx_kwargs)
+_mysql_connector.MySQLInterfaceError: Access denied for user 'root'@'localhost' (using password: YES)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\arkal\PycharmProjects\garagepulse\app.py", line 33, in initialize_application
+    DatabaseConnection.initialize_pool()
+  File "C:\Users\arkal\PycharmProjects\garagepulse\database\connection.py", line 33, in initialize_pool
+    cls._connection_pool = pooling.MySQLConnectionPool(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\pooling.py", line 490, in __init__
+    self.add_connection()
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\pooling.py", line 613, in add_connection
+    cnx = connect(**self._cnx_config)  # type: ignore[assignment]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\pooling.py", line 322, in connect
+    return CMySQLConnection(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\connection_cext.py", line 151, in __init__
+    self.connect(**kwargs)
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\abstracts.py", line 1399, in connect
+    self._open_connection()
+  File "C:\Users\arkal\PycharmProjects\garagepulse\.venv\Lib\site-packages\mysql\connector\connection_cext.py", line 339, in _open_connection
+    raise get_mysql_exception(
+mysql.connector.errors.ProgrammingError: 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)
+2026-03-17 20:01:59,947 | INFO | config.logging_config | logging_config.py:64 | Logging initialized. Level=INFO, File=logs/app.log
+2026-03-17 20:01:59,947 | INFO | __main__ | app.py:72 | Initializing application...
+2026-03-17 20:01:59,948 | INFO | __main__ | app.py:29 | Starting GaragePulse v1.0.0
+2026-03-17 20:02:00,150 | INFO | database.connection | connection.py:43 | MySQL connection pool initialized.
+2026-03-17 20:02:00,153 | INFO | __main__ | app.py:37 | Database connection verified successfully.
+2026-03-17 20:02:00,153 | INFO | __main__ | app.py:50 | UI initialization placeholder.
