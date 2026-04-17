@@ -1,20 +1,20 @@
 """
 ui/pages/dashboard_page.py
 
-Production-style Dashboard page for GaragePulse.
+Improved production-style Dashboard page for GaragePulse.
 
-Upgrades from prototype:
-- role-aware sidebar
-- summary cards
-- recent activity section
-- staff overview section
-- navigation to core modules
-- owner/admin-only entries for Active Accounts and Reports
+Updates:
+- adjusted left sidebar width and spacing
+- renamed Active Accounts -> Staff Management
+- changed revenue card label to Revenue This Month
+- formatted subtotal values in recent activity
+- fixed logout button spacing and bottom placement
 """
 
 from __future__ import annotations
 
 import logging
+import tkinter as tk
 from tkinter import messagebox, ttk
 
 from services.session_service import SessionService
@@ -23,45 +23,58 @@ from services.session_service import SessionService
 logger = logging.getLogger(__name__)
 
 
-class DashboardPage(ttk.Frame):
+class DashboardPage(tk.Frame):
     """
-    Main dashboard page with sidebar and content area.
+    Main dashboard page with modern sidebar and content area.
     """
+
+    SIDEBAR_WIDTH = 200
+
+    SIDEBAR_BG = "#0f172a"
+    SIDEBAR_ALT = "#1e293b"
+    SIDEBAR_ACTIVE = "#2563eb"
+    SIDEBAR_TEXT = "#f8fafc"
+    SIDEBAR_MUTED = "#cbd5e1"
+    CONTENT_BG = "#f1f5f9"
+    CARD_BG = "#ffffff"
+    TITLE_COLOR = "#0f172a"
+    BODY_COLOR = "#475569"
 
     def __init__(self, parent: ttk.Frame, app) -> None:
-        super().__init__(parent, style="App.TFrame")
-
+        super().__init__(parent)
         self.app = app
         self.dashboard_controller = app.get_controller("dashboard")
         self.auth_controller = app.get_controller("auth")
+        self.active_page_name = "dashboard"
 
-        self.summary_vars = {
-            "total_revenue": ttk.Label(),
-            "active_work_orders": ttk.Label(),
-            "completed_today": ttk.Label(),
-            "pending_payments": ttk.Label(),
+        self.summary_vars: dict[str, tk.StringVar] = {
+            "total_revenue": tk.StringVar(value="$0.00"),
+            "active_work_orders": tk.StringVar(value="0"),
+            "completed_today": tk.StringVar(value="0"),
+            "pending_payments": tk.StringVar(value="0"),
         }
 
-        self.staff_vars = {
-            "total_staff": ttk.Label(),
-            "active_staff": ttk.Label(),
-            "inactive_staff": ttk.Label(),
+        self.staff_vars: dict[str, tk.StringVar] = {
+            "total_staff": tk.StringVar(value="0"),
+            "active_staff": tk.StringVar(value="0"),
+            "inactive_staff": tk.StringVar(value="0"),
         }
 
+        self.configure(bg=self.CONTENT_BG)
         self._build_layout()
 
     def _build_layout(self) -> None:
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
-        self.sidebar = ttk.Frame(self, style="Card.TFrame", width=240, padding=16)
+        self.sidebar = tk.Frame(self, bg=self.SIDEBAR_BG, width=self.SIDEBAR_WIDTH)
         self.sidebar.grid(row=0, column=0, sticky="ns")
         self.sidebar.grid_propagate(False)
 
-        self.content = ttk.Frame(self, style="App.TFrame", padding=20)
+        self.content = tk.Frame(self, bg=self.CONTENT_BG)
         self.content.grid(row=0, column=1, sticky="nsew")
-        self.content.columnconfigure(0, weight=1)
-        self.content.rowconfigure(2, weight=1)
+        self.content.grid_columnconfigure(0, weight=1)
+        self.content.grid_rowconfigure(2, weight=1)
 
         self._build_sidebar()
         self._build_header()
@@ -72,117 +85,182 @@ class DashboardPage(ttk.Frame):
         for widget in self.sidebar.winfo_children():
             widget.destroy()
 
-        ttk.Label(
-            self.sidebar,
+        top = tk.Frame(self.sidebar, bg=self.SIDEBAR_BG)
+        top.pack(fill="x", padx=18, pady=(18, 10))
+
+        tk.Label(
+            top,
             text="GaragePulse",
-            font=("Segoe UI", 18, "bold"),
-        ).pack(anchor="w", pady=(4, 16))
+            font=("Segoe UI", 21, "bold"),
+            bg=self.SIDEBAR_BG,
+            fg=self.SIDEBAR_TEXT,
+        ).pack(anchor="w")
 
         user = SessionService.get_current_user() or {}
         full_name = user.get("full_name", "User")
         role_code = user.get("role_code", "")
 
-        ttk.Label(
-            self.sidebar,
+        info_box = tk.Frame(self.sidebar, bg=self.SIDEBAR_ALT)
+        info_box.pack(fill="x", padx=18, pady=(4, 12))
+
+        tk.Label(
+            info_box,
             text=full_name,
-            style="Body.TLabel",
-        ).pack(anchor="w")
+            font=("Segoe UI", 13, "bold"),
+            bg=self.SIDEBAR_ALT,
+            fg=self.SIDEBAR_TEXT,
+        ).pack(anchor="w", padx=14, pady=(12, 3))
 
-        ttk.Label(
-            self.sidebar,
+        tk.Label(
+            info_box,
             text=role_code,
-            style="Body.TLabel",
-        ).pack(anchor="w", pady=(0, 16))
+            font=("Segoe UI", 10),
+            bg=self.SIDEBAR_ALT,
+            fg=self.SIDEBAR_MUTED,
+        ).pack(anchor="w", padx=14, pady=(0, 12))
 
-        self._nav_button("Dashboard", self._refresh_dashboard)
-        self._nav_button("Customers", self._go_customers)
-        self._nav_button("Vehicles", self._go_vehicles)
-        self._nav_button("Work Orders", self._go_work_orders)
-        self._nav_button("Invoices", self._go_invoices)
-        self._nav_button("Notifications", self._go_notifications)
+        nav = tk.Frame(self.sidebar, bg=self.SIDEBAR_BG)
+        nav.pack(fill="x", padx=14)
+
+        self._nav_button(nav, "dashboard", "Dashboard", self._refresh_dashboard)
+        self._nav_button(nav, "customers", "Customers", self._go_customers)
+        self._nav_button(nav, "vehicles", "Vehicles", self._go_vehicles)
+        self._nav_button(nav, "work_orders", "Work Orders", self._go_work_orders)
+        self._nav_button(nav, "invoices", "Invoices", self._go_invoices)
+        self._nav_button(nav, "notifications", "Notifications", self._go_notifications)
 
         if SessionService.has_role("OWNER", "ADMIN"):
-            self._nav_button("Active Accounts", self._go_users)
-            self._nav_button("Reports", self._go_reports)
+            self._nav_button(nav, "users", "Staff Management", self._go_users)
+            self._nav_button(nav, "reports", "Reports", self._go_reports)
 
-        ttk.Separator(self.sidebar).pack(fill="x", pady=12)
+        tk.Frame(self.sidebar, bg="#334155", height=1).pack(fill="x", padx=18, pady=14)
 
-        ttk.Button(
-            self.sidebar,
+        logout_frame = tk.Frame(self.sidebar, bg=self.SIDEBAR_BG)
+        logout_frame.pack(side="bottom", fill="x", padx=18, pady=(10, 20))
+
+        tk.Button(
+            logout_frame,
             text="Logout",
             command=self._logout,
-        ).pack(fill="x", pady=(8, 0))
+            font=("Segoe UI", 10, "bold"),
+            bg="#dc2626",
+            fg="white",
+            activebackground="#b91c1c",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=10,
+            cursor="hand2",
+        ).pack(fill="x")
+
+    def _nav_button(self, parent, page_name: str, text: str, command) -> None:
+        is_active = self.active_page_name == page_name
+        bg = self.SIDEBAR_ACTIVE if is_active else self.SIDEBAR_BG
+        fg = self.SIDEBAR_TEXT if is_active else self.SIDEBAR_MUTED
+
+        tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=("Segoe UI", 11, "bold" if is_active else "normal"),
+            bg=bg,
+            fg=fg,
+            activebackground=self.SIDEBAR_ACTIVE,
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            anchor="w",
+            padx=18,
+            pady=11,
+            cursor="hand2",
+        ).pack(fill="x", pady=4)
 
     def _build_header(self) -> None:
-        header = ttk.Frame(self.content, style="App.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        header.columnconfigure(0, weight=1)
+        header = tk.Frame(self.content, bg=self.CONTENT_BG)
+        header.grid(row=0, column=0, sticky="ew", padx=24, pady=(22, 14))
+        header.grid_columnconfigure(0, weight=1)
 
-        ttk.Label(
+        tk.Label(
             header,
             text="Owner Dashboard",
-            style="PageTitle.TLabel",
+            font=("Segoe UI", 22, "bold"),
+            bg=self.CONTENT_BG,
+            fg=self.TITLE_COLOR,
         ).grid(row=0, column=0, sticky="w")
 
-        ttk.Button(
+        tk.Button(
             header,
             text="Refresh Dashboard",
             command=self._refresh_dashboard,
+            font=("Segoe UI", 10, "bold"),
+            bg="#e2e8f0",
+            fg="#0f172a",
+            activebackground="#cbd5e1",
+            relief="flat",
+            bd=0,
+            padx=14,
+            pady=10,
+            cursor="hand2",
         ).grid(row=0, column=1, sticky="e")
 
     def _build_summary_cards(self) -> None:
-        cards_frame = ttk.Frame(self.content, style="App.TFrame")
-        cards_frame.grid(row=1, column=0, sticky="ew", pady=(0, 18))
-
+        cards = tk.Frame(self.content, bg=self.CONTENT_BG)
+        cards.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 18))
         for i in range(4):
-            cards_frame.columnconfigure(i, weight=1)
+            cards.grid_columnconfigure(i, weight=1)
 
-        cards = [
-            ("Total Revenue", "total_revenue"),
+        card_data = [
+            ("Revenue This Month", "total_revenue"),
             ("Active Work Orders", "active_work_orders"),
             ("Completed Today", "completed_today"),
             ("Pending Payments", "pending_payments"),
         ]
 
-        for idx, (title, key) in enumerate(cards):
-            card = ttk.Frame(cards_frame, style="Card.TFrame", padding=18)
-            card.grid(row=0, column=idx, sticky="nsew", padx=(0 if idx == 0 else 8, 0))
+        for idx, (title, key) in enumerate(card_data):
+            card = tk.Frame(cards, bg=self.CARD_BG, bd=0, relief="flat")
+            card.grid(row=0, column=idx, sticky="nsew", padx=(0 if idx == 0 else 10, 0))
 
-            ttk.Label(
+            tk.Label(
                 card,
                 text=title,
-                style="Body.TLabel",
-            ).pack(anchor="w")
+                font=("Segoe UI", 11),
+                bg=self.CARD_BG,
+                fg=self.BODY_COLOR,
+            ).pack(anchor="w", padx=18, pady=(18, 8))
 
-            value_label = ttk.Label(
+            tk.Label(
                 card,
-                text="--",
-                font=("Segoe UI", 18, "bold"),
-            )
-            value_label.pack(anchor="w", pady=(10, 0))
-            self.summary_vars[key] = value_label
+                textvariable=self.summary_vars[key],
+                font=("Segoe UI", 24, "bold"),
+                bg=self.CARD_BG,
+                fg=self.TITLE_COLOR,
+            ).pack(anchor="w", padx=18, pady=(0, 18))
 
     def _build_lower_sections(self) -> None:
-        lower = ttk.Frame(self.content, style="App.TFrame")
-        lower.grid(row=2, column=0, sticky="nsew")
-        lower.columnconfigure(0, weight=2)
-        lower.columnconfigure(1, weight=1)
-        lower.rowconfigure(0, weight=1)
+        lower = tk.Frame(self.content, bg=self.CONTENT_BG)
+        lower.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        lower.grid_columnconfigure(0, weight=3)
+        lower.grid_columnconfigure(1, weight=1)
+        lower.grid_rowconfigure(0, weight=1)
 
         self._build_recent_activity(lower)
         self._build_staff_overview(lower)
 
-    def _build_recent_activity(self, parent: ttk.Frame) -> None:
-        card = ttk.Frame(parent, style="Card.TFrame", padding=18)
-        card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        card.columnconfigure(0, weight=1)
-        card.rowconfigure(1, weight=1)
+    def _build_recent_activity(self, parent) -> None:
+        card = tk.Frame(parent, bg=self.CARD_BG)
+        card.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
 
-        ttk.Label(
+        tk.Label(
             card,
             text="Recent Activity",
-            style="PageTitle.TLabel",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+            font=("Segoe UI", 18, "bold"),
+            bg=self.CARD_BG,
+            fg=self.TITLE_COLOR,
+        ).pack(anchor="w", padx=18, pady=(18, 12))
+
+        table_frame = tk.Frame(card, bg=self.CARD_BG)
+        table_frame.pack(fill="both", expand=True, padx=18, pady=(0, 18))
 
         columns = (
             "work_order_id",
@@ -193,12 +271,15 @@ class DashboardPage(ttk.Frame):
         )
 
         self.activity_tree = ttk.Treeview(
-            card,
+            table_frame,
             columns=columns,
             show="headings",
             height=12,
         )
-        self.activity_tree.grid(row=1, column=0, sticky="nsew")
+        self.activity_tree.grid(row=0, column=0, sticky="nsew")
+
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(0, weight=1)
 
         headings = {
             "work_order_id": "Work Order ID",
@@ -209,11 +290,11 @@ class DashboardPage(ttk.Frame):
         }
 
         widths = {
-            "work_order_id": 130,
-            "customer_name": 150,
-            "plate_number": 110,
-            "current_status": 110,
-            "subtotal": 100,
+            "work_order_id": 150,
+            "customer_name": 180,
+            "plate_number": 120,
+            "current_status": 140,
+            "subtotal": 120,
         }
 
         for col in columns:
@@ -221,79 +302,70 @@ class DashboardPage(ttk.Frame):
             self.activity_tree.column(col, width=widths[col], anchor="w")
 
         scrollbar = ttk.Scrollbar(
-            card,
+            table_frame,
             orient="vertical",
             command=self.activity_tree.yview,
         )
-        scrollbar.grid(row=1, column=1, sticky="ns")
+        scrollbar.grid(row=0, column=1, sticky="ns")
         self.activity_tree.configure(yscrollcommand=scrollbar.set)
 
-    def _build_staff_overview(self, parent: ttk.Frame) -> None:
-        card = ttk.Frame(parent, style="Card.TFrame", padding=18)
+    def _build_staff_overview(self, parent) -> None:
+        card = tk.Frame(parent, bg=self.CARD_BG)
         card.grid(row=0, column=1, sticky="nsew")
-        card.columnconfigure(0, weight=1)
 
-        ttk.Label(
+        tk.Label(
             card,
             text="Staff Overview",
-            style="PageTitle.TLabel",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+            font=("Segoe UI", 18, "bold"),
+            bg=self.CARD_BG,
+            fg=self.TITLE_COLOR,
+        ).pack(anchor="w", padx=18, pady=(18, 14))
 
-        labels = [
+        for title, key in [
             ("Total Staff", "total_staff"),
             ("Active Staff", "active_staff"),
             ("Inactive Staff", "inactive_staff"),
-        ]
+        ]:
+            row = tk.Frame(card, bg=self.CARD_BG)
+            row.pack(fill="x", padx=18, pady=8)
 
-        for idx, (title, key) in enumerate(labels, start=1):
-            row = ttk.Frame(card, style="Card.TFrame")
-            row.grid(row=idx, column=0, sticky="ew", pady=6)
-            row.columnconfigure(1, weight=1)
-
-            ttk.Label(
+            tk.Label(
                 row,
                 text=title,
-                style="Body.TLabel",
-            ).grid(row=0, column=0, sticky="w")
+                font=("Segoe UI", 11),
+                bg=self.CARD_BG,
+                fg=self.BODY_COLOR,
+            ).pack(side="left")
 
-            value_label = ttk.Label(
+            tk.Label(
                 row,
-                text="--",
-                font=("Segoe UI", 12, "bold"),
-            )
-            value_label.grid(row=0, column=1, sticky="e")
-            self.staff_vars[key] = value_label
+                textvariable=self.staff_vars[key],
+                font=("Segoe UI", 16, "bold"),
+                bg=self.CARD_BG,
+                fg=self.TITLE_COLOR,
+            ).pack(side="right")
 
     def _refresh_dashboard(self) -> None:
+        self.active_page_name = "dashboard"
+        self._build_sidebar()
         self._load_summary()
         self._load_recent_activity()
         self._load_staff_overview()
 
     def _load_summary(self) -> None:
         response = self.dashboard_controller.get_dashboard_summary()
-
         if not response.success:
             messagebox.showerror("Dashboard Error", response.message)
             return
 
         data = response.data or {}
-
-        self.summary_vars["total_revenue"].configure(
-            text=f"${float(data.get('total_revenue', 0.0)):.2f}"
-        )
-        self.summary_vars["active_work_orders"].configure(
-            text=str(data.get("active_work_orders", 0))
-        )
-        self.summary_vars["completed_today"].configure(
-            text=str(data.get("completed_today", 0))
-        )
-        self.summary_vars["pending_payments"].configure(
-            text=str(data.get("pending_payments", 0))
-        )
+        self.summary_vars["total_revenue"].set(f"${float(data.get('total_revenue', 0.0)):.2f}")
+        self.summary_vars["active_work_orders"].set(str(data.get("active_work_orders", 0)))
+        self.summary_vars["completed_today"].set(str(data.get("completed_today", 0)))
+        self.summary_vars["pending_payments"].set(str(data.get("pending_payments", 0)))
 
     def _load_recent_activity(self) -> None:
         response = self.dashboard_controller.get_recent_activity(limit=10)
-
         if not response.success:
             messagebox.showerror("Dashboard Error", response.message)
             return
@@ -301,6 +373,7 @@ class DashboardPage(ttk.Frame):
         self.activity_tree.delete(*self.activity_tree.get_children())
 
         for row in response.data or []:
+            subtotal = float(row.get("subtotal", 0) or 0)
             self.activity_tree.insert(
                 "",
                 "end",
@@ -309,43 +382,28 @@ class DashboardPage(ttk.Frame):
                     row.get("customer_name", ""),
                     row.get("plate_number", ""),
                     row.get("current_status", ""),
-                    row.get("subtotal", 0),
+                    f"${subtotal:.2f}",
                 ),
             )
 
     def _load_staff_overview(self) -> None:
         response = self.dashboard_controller.get_staff_overview()
-
         if not response.success:
             messagebox.showerror("Dashboard Error", response.message)
             return
 
         data = response.data or {}
-
-        self.staff_vars["total_staff"].configure(
-            text=str(data.get("total_staff", 0))
-        )
-        self.staff_vars["active_staff"].configure(
-            text=str(data.get("active_staff", 0))
-        )
-        self.staff_vars["inactive_staff"].configure(
-            text=str(data.get("inactive_staff", 0))
-        )
+        self.staff_vars["total_staff"].set(str(data.get("total_staff", 0)))
+        self.staff_vars["active_staff"].set(str(data.get("active_staff", 0)))
+        self.staff_vars["inactive_staff"].set(str(data.get("inactive_staff", 0)))
 
     def _nav_to_page(self, name: str, module_path: str, class_name: str) -> None:
+        self.active_page_name = name
         if name not in self.app.pages:
             module = __import__(module_path, fromlist=[class_name])
             page_class = getattr(module, class_name)
             self.app.register_page(name, page_class)
-
         self.app.show_page(name)
-
-    def _nav_button(self, text: str, command) -> None:
-        ttk.Button(
-            self.sidebar,
-            text=text,
-            command=command,
-        ).pack(fill="x", pady=4)
 
     def _go_customers(self) -> None:
         self._nav_to_page("customers", "ui.pages.customers_page", "CustomersPage")
@@ -360,11 +418,7 @@ class DashboardPage(ttk.Frame):
         self._nav_to_page("invoices", "ui.pages.invoices_page", "InvoicesPage")
 
     def _go_notifications(self) -> None:
-        self._nav_to_page(
-            "notifications",
-            "ui.pages.notifications_page",
-            "NotificationsPage",
-        )
+        self._nav_to_page("notifications", "ui.pages.notifications_page", "NotificationsPage")
 
     def _go_users(self) -> None:
         self._nav_to_page("users", "ui.pages.users_page", "UsersPage")
@@ -374,13 +428,14 @@ class DashboardPage(ttk.Frame):
 
     def _logout(self) -> None:
         response = self.auth_controller.logout()
-
         if not response.success:
             messagebox.showerror("Logout Error", response.message)
             return
-
         self.app.logout_and_redirect("login")
 
     def on_show(self) -> None:
+        self.active_page_name = "dashboard"
         self._build_sidebar()
-        self._refresh_dashboard()
+        self._load_summary()
+        self._load_recent_activity()
+        self._load_staff_overview()

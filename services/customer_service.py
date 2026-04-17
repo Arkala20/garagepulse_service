@@ -2,8 +2,7 @@
 services/customer_service.py
 
 Customer service for GaragePulse.
-Aligned with schema.sql customer address fields and corrected
-session exception handling.
+Supports create, update, and broad customer search.
 """
 
 from __future__ import annotations
@@ -11,8 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from services.session_service import SessionService
 from repositories.customer_repository import CustomerRepository
+from services.session_service import SessionService
 from utils.exceptions import AuthenticationError, AuthorizationError
 from utils.response import ServiceResponse
 from utils.validators import Validators
@@ -41,9 +40,6 @@ class CustomerService:
         postal_code: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> ServiceResponse:
-        """
-        Create a new customer.
-        """
         try:
             SessionService.require_authentication()
 
@@ -83,7 +79,7 @@ class CustomerService:
                 }
             )
 
-            logger.info("Customer created successfully: id=%s, phone=%s", customer_id, phone)
+            logger.info("Customer created successfully: id=%s", customer_id)
 
             return ServiceResponse.success_response(
                 message="Customer created successfully.",
@@ -110,17 +106,12 @@ class CustomerService:
         postal_code: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> ServiceResponse:
-        """
-        Update customer details.
-        """
         try:
             SessionService.require_authentication()
 
             existing = self.customer_repo.get_by_id(customer_id)
             if not existing or not existing.get("is_active"):
-                return ServiceResponse.error_response(
-                    message="Customer not found."
-                )
+                return ServiceResponse.error_response(message="Customer not found.")
 
             update_data = {}
 
@@ -165,9 +156,7 @@ class CustomerService:
             update_data["updated_by"] = actor_id
 
             if len(update_data) == 1 and "updated_by" in update_data:
-                return ServiceResponse.error_response(
-                    message="No fields to update."
-                )
+                return ServiceResponse.error_response(message="No fields to update.")
 
             self.customer_repo.update_customer(customer_id, update_data)
 
@@ -184,13 +173,32 @@ class CustomerService:
             logger.exception("Failed to update customer: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
 
-    def search_by_phone(self, phone_fragment: str) -> ServiceResponse:
+    def search_customers(self, search_text: str) -> ServiceResponse:
         """
-        Search customers by phone number.
+        Search by any visible customer detail.
+        """
+        try:
+            SessionService.require_authentication()
 
-        Professor requirement:
-        customers search by phone.
-        """
+            search_text = (search_text or "").strip()
+            if not search_text:
+                customers = self.customer_repo.get_all_customers()
+            else:
+                customers = self.customer_repo.search_customers(search_text)
+
+            return ServiceResponse.success_response(
+                message="Customers retrieved successfully.",
+                data=customers,
+            )
+
+        except (AuthenticationError, AuthorizationError) as exc:
+            logger.warning("Authentication/authorization failed: %s", exc)
+            return ServiceResponse.error_response(message=str(exc))
+        except Exception as exc:
+            logger.exception("Failed to search customers: %s", exc)
+            return ServiceResponse.error_response(message=str(exc))
+
+    def search_by_phone(self, phone_fragment: str) -> ServiceResponse:
         try:
             SessionService.require_authentication()
 
@@ -215,17 +223,12 @@ class CustomerService:
             return ServiceResponse.error_response(message=str(exc))
 
     def get_customer(self, customer_id: int) -> ServiceResponse:
-        """
-        Get a single customer by ID.
-        """
         try:
             SessionService.require_authentication()
 
             customer = self.customer_repo.get_by_id(customer_id)
             if not customer or not customer.get("is_active"):
-                return ServiceResponse.error_response(
-                    message="Customer not found."
-                )
+                return ServiceResponse.error_response(message="Customer not found.")
 
             return ServiceResponse.success_response(
                 message="Customer retrieved successfully.",
@@ -240,9 +243,6 @@ class CustomerService:
             return ServiceResponse.error_response(message=str(exc))
 
     def get_all_customers(self) -> ServiceResponse:
-        """
-        Get all active customers.
-        """
         try:
             SessionService.require_authentication()
 
@@ -261,17 +261,12 @@ class CustomerService:
             return ServiceResponse.error_response(message=str(exc))
 
     def deactivate_customer(self, customer_id: int) -> ServiceResponse:
-        """
-        Deactivate a customer.
-        """
         try:
             SessionService.require_authentication()
 
             existing = self.customer_repo.get_by_id(customer_id)
             if not existing or not existing.get("is_active"):
-                return ServiceResponse.error_response(
-                    message="Customer not found."
-                )
+                return ServiceResponse.error_response(message="Customer not found.")
 
             self.customer_repo.deactivate_customer(customer_id)
 

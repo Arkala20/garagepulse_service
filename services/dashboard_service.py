@@ -35,7 +35,7 @@ class DashboardService:
         Return main dashboard summary cards.
 
         Includes:
-        - total revenue
+        - current month revenue
         - active work orders
         - completed jobs today
         - pending payments
@@ -43,7 +43,7 @@ class DashboardService:
         try:
             SessionService.require_authentication()
 
-            total_revenue = self.invoice_repo.get_total_revenue()
+            total_revenue = self.invoice_repo.get_current_month_revenue()
             active_work_orders = self.work_order_repo.count_active_work_orders()
             completed_today = self.work_order_repo.count_completed_today()
             pending_payments = self.invoice_repo.get_pending_payments_count()

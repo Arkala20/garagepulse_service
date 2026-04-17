@@ -15,6 +15,8 @@ from mysql.connector import Error
 from mysql.connector.cursor import MySQLCursorDict
 
 from database.connection import DatabaseConnection
+from config.settings import settings
+print("DB DEBUG:", settings.DB_HOST, settings.DB_NAME, settings.DB_USER)
 
 
 logger = logging.getLogger(__name__)

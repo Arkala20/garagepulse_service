@@ -120,10 +120,6 @@ class InvoiceItemRepository(BaseRepository):
         return DatabaseManager.execute(query, (item_id,))
 
     def delete_by_invoice_id(self, invoice_id: int) -> int:
-        """
-        Delete all items linked to an invoice.
-        Useful when rebuilding invoice items during invoice edit/regeneration.
-        """
         query = """
         DELETE FROM invoice_items
         WHERE invoice_id = %s

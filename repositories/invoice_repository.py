@@ -116,18 +116,17 @@ class InvoiceRepository(BaseRepository):
 
     def update_invoice_totals(
         self,
-        invoice_id: int,
-        labor_total: float,
-        parts_total: float,
-        subtotal: float,
-        tax_rate: float,
-        tax_amount: float,
-        discount_amount: float,
-        grand_total: float,
-    ) -> int:
-        """
-        Update invoice financial totals.
-        """
+        invoice_id,
+        labor_total,
+        parts_total,
+        subtotal,
+        tax_rate,
+        tax_amount,
+        discount_amount,
+        grand_total,
+        due_date,
+        notes,
+    ):
         query = """
         UPDATE invoices
         SET labor_total = %s,
@@ -137,6 +136,8 @@ class InvoiceRepository(BaseRepository):
             tax_amount = %s,
             discount_amount = %s,
             grand_total = %s,
+            due_date = %s,
+            notes = %s,
             updated_at = NOW()
         WHERE id = %s
         """
@@ -150,18 +151,52 @@ class InvoiceRepository(BaseRepository):
                 tax_amount,
                 discount_amount,
                 grand_total,
+                due_date,
+                notes,
                 invoice_id,
             ),
         )
 
     def get_total_revenue(self) -> float:
         """
-        Calculate total paid revenue.
+        Calculate all-time invoiced revenue.
+        """
+        query = """
+        SELECT COALESCE(SUM(grand_total), 0) AS total_revenue
+        FROM invoices
+        """
+        result = DatabaseManager.fetch_one(query)
+        return float(result["total_revenue"]) if result else 0.0
+
+    def get_current_month_revenue(self) -> float:
+        """
+        Calculate invoiced revenue for the current month.
+
+        Business rule:
+        - based on invoice creation month
+        - includes all generated invoices
+        """
+        query = """
+        SELECT COALESCE(SUM(grand_total), 0) AS total_revenue
+        FROM invoices
+        WHERE YEAR(created_at) = YEAR(CURDATE())
+          AND MONTH(created_at) = MONTH(CURDATE())
+        """
+        result = DatabaseManager.fetch_one(query)
+        return float(result["total_revenue"]) if result else 0.0
+
+    def get_current_month_collected_revenue(self) -> float:
+        """
+        Optional metric: money actually collected this month.
+        Uses paid_at and PAID status.
         """
         query = """
         SELECT COALESCE(SUM(grand_total), 0) AS total_revenue
         FROM invoices
         WHERE payment_status = 'PAID'
+          AND paid_at IS NOT NULL
+          AND YEAR(paid_at) = YEAR(CURDATE())
+          AND MONTH(paid_at) = MONTH(CURDATE())
         """
         result = DatabaseManager.fetch_one(query)
         return float(result["total_revenue"]) if result else 0.0

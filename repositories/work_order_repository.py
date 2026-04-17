@@ -18,19 +18,21 @@ class WorkOrderRepository(BaseRepository):
 
     table_name = "work_orders"
 
-    # -------------------------------------------------
-    # Work Order Lookup
-    # -------------------------------------------------
-
     def get_by_work_order_id(self, work_order_id: str) -> Optional[Dict]:
         """
         Get work order using business ID (WO-000001).
         """
         query = """
-        SELECT wo.*, 
-               c.full_name AS customer_name,
-               v.plate_number,
-               u.username AS assigned_staff
+        SELECT
+            wo.*,
+            c.full_name AS customer_name,
+            c.email AS customer_email,
+            c.phone AS customer_phone,
+            v.plate_number,
+            v.make,
+            v.model,
+            v.vehicle_year,
+            u.username AS assigned_staff
         FROM work_orders wo
         JOIN customers c ON wo.customer_id = c.id
         JOIN vehicles v ON wo.vehicle_id = v.id
@@ -45,13 +47,16 @@ class WorkOrderRepository(BaseRepository):
         Get work order by internal ID with joins.
         """
         query = """
-        SELECT wo.*, 
-               c.full_name AS customer_name,
-               c.phone AS customer_phone,
-               v.plate_number,
-               v.make,
-               v.model,
-               u.username AS assigned_staff
+        SELECT
+            wo.*,
+            c.full_name AS customer_name,
+            c.email AS customer_email,
+            c.phone AS customer_phone,
+            v.plate_number,
+            v.make,
+            v.model,
+            v.vehicle_year,
+            u.username AS assigned_staff
         FROM work_orders wo
         JOIN customers c ON wo.customer_id = c.id
         JOIN vehicles v ON wo.vehicle_id = v.id
@@ -61,21 +66,42 @@ class WorkOrderRepository(BaseRepository):
         """
         return DatabaseManager.fetch_one(query, (record_id,))
 
-    # -------------------------------------------------
-    # Work Order Listing
-    # -------------------------------------------------
+    def get_by_id(self, record_id: int) -> Optional[Dict]:
+        """
+        Alias used by services that expect get_by_id().
+        """
+        return self.get_by_id_with_details(record_id)
 
     def get_all_work_orders(self, limit: int = 100, offset: int = 0) -> List[Dict]:
         """
         Retrieve all work orders.
+        Includes customer email for notification autofill.
+        Also calculates parts_total/subtotal safely.
         """
         query = """
-        SELECT wo.*, 
-               c.full_name AS customer_name,
-               v.plate_number
+        SELECT
+            wo.*,
+            c.full_name AS customer_name,
+            c.email AS customer_email,
+            c.phone AS customer_phone,
+            v.plate_number,
+            v.make,
+            v.model,
+            v.vehicle_year,
+            u.username AS assigned_staff,
+            COALESCE(parts.parts_total, 0) AS parts_total,
+            COALESCE(wo.labor_cost, 0) + COALESCE(parts.parts_total, 0) AS subtotal
         FROM work_orders wo
         JOIN customers c ON wo.customer_id = c.id
         JOIN vehicles v ON wo.vehicle_id = v.id
+        LEFT JOIN users u ON wo.assigned_staff_id = u.id
+        LEFT JOIN (
+            SELECT
+                work_order_id,
+                SUM(quantity * unit_price) AS parts_total
+            FROM work_order_parts
+            GROUP BY work_order_id
+        ) parts ON parts.work_order_id = wo.id
         ORDER BY wo.created_at DESC
         LIMIT %s OFFSET %s
         """
@@ -105,10 +131,6 @@ class WorkOrderRepository(BaseRepository):
         """
         return DatabaseManager.fetch_all(query)
 
-    # -------------------------------------------------
-    # Create / Update
-    # -------------------------------------------------
-
     def create_work_order(self, data: Dict) -> int:
         """
         Create new work order.
@@ -121,25 +143,38 @@ class WorkOrderRepository(BaseRepository):
         """
         return self.update(work_order_id, data)
 
-    # -------------------------------------------------
-    # Status Management
-    # -------------------------------------------------
-
-    def update_status(self, work_order_id: int, status: str) -> int:
+    def update_status(self, work_order_id: int, status: str, status_note: Optional[str] = None) -> int:
         """
         Update current status of work order.
+        Sets completed_at when status becomes COMPLETED.
+        Clears completed_at when reopened.
         """
         query = """
         UPDATE work_orders
         SET current_status = %s,
+            completed_at = CASE
+                WHEN %s = 'COMPLETED' AND completed_at IS NULL THEN NOW()
+                WHEN %s <> 'COMPLETED' THEN NULL
+                ELSE completed_at
+            END,
             updated_at = NOW()
         WHERE id = %s
         """
-        return DatabaseManager.execute(query, (status, work_order_id))
+        rows = DatabaseManager.execute(query, (status, status, status, work_order_id))
 
-    # -------------------------------------------------
-    # Financial Updates
-    # -------------------------------------------------
+        if status_note:
+            history_query = """
+            INSERT INTO status_history (
+                work_order_id,
+                status,
+                status_note,
+                changed_at
+            )
+            VALUES (%s, %s, %s, NOW())
+            """
+            DatabaseManager.execute(history_query, (work_order_id, status, status_note))
+
+        return rows
 
     def update_costs(
         self,
@@ -163,9 +198,17 @@ class WorkOrderRepository(BaseRepository):
             (labor_cost, parts_total, subtotal, work_order_id),
         )
 
-    # -------------------------------------------------
-    # Assignment
-    # -------------------------------------------------
+    def set_labor_cost(self, work_order_id: int, labor_cost: float) -> int:
+        """
+        Update labor cost only.
+        """
+        query = """
+        UPDATE work_orders
+        SET labor_cost = %s,
+            updated_at = NOW()
+        WHERE id = %s
+        """
+        return DatabaseManager.execute(query, (labor_cost, work_order_id))
 
     def assign_staff(self, work_order_id: int, staff_id: int) -> int:
         """
@@ -178,10 +221,6 @@ class WorkOrderRepository(BaseRepository):
         """
         return DatabaseManager.execute(query, (staff_id, work_order_id))
 
-    # -------------------------------------------------
-    # Dashboard Queries
-    # -------------------------------------------------
-
     def count_active_work_orders(self) -> int:
         query = """
         SELECT COUNT(*) AS count
@@ -189,13 +228,14 @@ class WorkOrderRepository(BaseRepository):
         WHERE current_status IN ('NEW', 'IN_PROGRESS', 'READY')
         """
         result = DatabaseManager.fetch_one(query)
-        return result["count"] if result else 0
+        return int(result["count"]) if result else 0
 
     def count_completed_today(self) -> int:
         query = """
         SELECT COUNT(*) AS count
         FROM work_orders
-        WHERE DATE(completed_at) = CURDATE()
+        WHERE current_status = 'COMPLETED'
+          AND DATE(completed_at) = CURDATE()
         """
         result = DatabaseManager.fetch_one(query)
-        return result["count"] if result else 0
+        return int(result["count"]) if result else 0

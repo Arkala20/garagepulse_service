@@ -1,12 +1,13 @@
 """
 ui/pages/users_page.py
 
-Production-style Active Accounts + Staff Registration page for GaragePulse.
+Active Accounts + Staff Registration page for GaragePulse.
 
-Fixes:
-- activation controls always visible
-- selected user ID shown above table
-- better owner/admin workflow
+Updates:
+- mandatory markers for required registration fields
+- separate Activate User and Deactivate User buttons
+- selected user info row separated from action buttons row
+- cleaner production-style workflow
 """
 
 from __future__ import annotations
@@ -15,19 +16,27 @@ import logging
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from ui.shared.app_shell import AppShell
+
 
 logger = logging.getLogger(__name__)
 
 
-class UsersPage(ttk.Frame):
+class UsersPage(AppShell):
     """
     Active Accounts and Staff Registration page.
     """
 
-    def __init__(self, parent: ttk.Frame, app) -> None:
-        super().__init__(parent, style="App.TFrame")
+    LEFT_PANEL_WIDTH = 360
 
-        self.app = app
+    def __init__(self, parent, app) -> None:
+        super().__init__(
+            parent=parent,
+            app=app,
+            active_page_name="users",
+            page_title="Active Accounts",
+        )
+
         self.user_controller = app.get_controller("user")
 
         self.first_name_var = tk.StringVar()
@@ -41,179 +50,271 @@ class UsersPage(ttk.Frame):
         self.filter_var = tk.StringVar(value="ALL")
         self.selected_user_id_var = tk.StringVar()
         self.selected_username_var = tk.StringVar()
+        self.selected_status_var = tk.StringVar()
 
-        self._build_ui()
+        self.activate_button = None
+        self.deactivate_button = None
 
-    def _build_ui(self) -> None:
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self._build_page_content()
 
-        header = ttk.Frame(self, style="App.TFrame")
-        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
-        header.columnconfigure(1, weight=1)
+    def _build_page_content(self) -> None:
+        self.content.grid_columnconfigure(0, weight=0, minsize=self.LEFT_PANEL_WIDTH)
+        self.content.grid_columnconfigure(1, weight=1)
+        self.content.grid_rowconfigure(0, weight=1)
 
-        ttk.Label(
-            header,
-            text="Active Accounts",
-            style="PageTitle.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+        left_card = tk.Frame(self.content, bg=self.CARD_BG, width=self.LEFT_PANEL_WIDTH)
+        left_card.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+        left_card.grid_propagate(False)
 
-        ttk.Button(
-            header,
-            text="Back to Dashboard",
-            command=lambda: self.app.show_page("dashboard"),
-        ).grid(row=0, column=2, sticky="e")
+        right_card = tk.Frame(self.content, bg=self.CARD_BG)
+        right_card.grid(row=0, column=1, sticky="nsew")
 
-        body = ttk.Frame(self, style="App.TFrame")
-        body.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
-        body.columnconfigure(1, weight=1)
-        body.rowconfigure(0, weight=1)
+        self._build_left_panel(left_card)
+        self._build_right_panel(right_card)
 
-        self._build_left_panel(body)
-        self._build_right_panel(body)
+    def _build_left_panel(self, parent: tk.Frame) -> None:
+        parent.grid_columnconfigure(0, weight=1)
 
-    def _build_left_panel(self, parent: ttk.Frame) -> None:
-        panel = ttk.Frame(parent, style="Card.TFrame", padding=18)
-        panel.grid(row=0, column=0, sticky="nsw", padx=(0, 15))
+        row = 0
 
-        ttk.Label(
-            panel,
+        tk.Label(
+            parent,
             text="Staff Registration",
-            style="PageTitle.TLabel",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 12))
+            font=("Segoe UI", 18, "bold"),
+            bg=self.CARD_BG,
+            fg=self.TITLE_COLOR,
+        ).grid(row=row, column=0, sticky="w", padx=18, pady=(18, 14))
 
-        row = 1
-        self._add_label(panel, row, "First Name")
-        row += 1
-        ttk.Entry(panel, textvariable=self.first_name_var, width=34).grid(
-            row=row, column=0, sticky="ew", pady=(0, 8)
-        )
+        fields = [
+            ("First Name", self.first_name_var, True),
+            ("Last Name", self.last_name_var, True),
+            ("Username", self.username_var, True),
+            ("Email", self.email_var, True),
+            ("Phone", self.phone_var, False),
+            ("Password", self.password_var, True),
+        ]
 
-        row += 1
-        self._add_label(panel, row, "Last Name")
-        row += 1
-        ttk.Entry(panel, textvariable=self.last_name_var, width=34).grid(
-            row=row, column=0, sticky="ew", pady=(0, 8)
-        )
+        for label_text, variable, required in fields:
+            row += 1
+            self._add_label(parent, row, label_text, required=required)
+            row += 1
 
-        row += 1
-        self._add_label(panel, row, "Username")
-        row += 1
-        ttk.Entry(panel, textvariable=self.username_var, width=34).grid(
-            row=row, column=0, sticky="ew", pady=(0, 8)
-        )
+            entry_kwargs = {
+                "textvariable": variable,
+                "font": ("Segoe UI", 10),
+                "relief": "solid",
+                "bd": 1,
+            }
+            if label_text == "Password":
+                entry_kwargs["show"] = "*"
 
-        row += 1
-        self._add_label(panel, row, "Email")
-        row += 1
-        ttk.Entry(panel, textvariable=self.email_var, width=34).grid(
-            row=row, column=0, sticky="ew", pady=(0, 8)
-        )
-
-        row += 1
-        self._add_label(panel, row, "Phone")
-        row += 1
-        ttk.Entry(panel, textvariable=self.phone_var, width=34).grid(
-            row=row, column=0, sticky="ew", pady=(0, 8)
-        )
+            tk.Entry(parent, **entry_kwargs).grid(
+                row=row, column=0, sticky="ew", padx=18, pady=(0, 10)
+            )
 
         row += 1
-        self._add_label(panel, row, "Password")
-        row += 1
-        ttk.Entry(panel, textvariable=self.password_var, show="*", width=34).grid(
-            row=row, column=0, sticky="ew", pady=(0, 8)
-        )
-
-        row += 1
-        self._add_label(panel, row, "Role")
+        self._add_label(parent, row, "Role", required=True)
         row += 1
         ttk.Combobox(
-            panel,
+            parent,
             textvariable=self.role_var,
             values=["STAFF", "ADMIN"],
             state="readonly",
-            width=32,
-        ).grid(row=row, column=0, sticky="ew", pady=(0, 10))
+        ).grid(row=row, column=0, sticky="ew", padx=18, pady=(0, 12))
 
         row += 1
-        ttk.Button(
-            panel,
+        tk.Button(
+            parent,
             text="Create Staff Account",
-            style="Primary.TButton",
             command=self._register_staff,
-        ).grid(row=row, column=0, sticky="ew", pady=(4, 8))
+            font=("Segoe UI", 11, "bold"),
+            bg="#2563eb",
+            fg="white",
+            activebackground="#1d4ed8",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            padx=12,
+            pady=12,
+            cursor="hand2",
+        ).grid(row=row, column=0, sticky="ew", padx=18, pady=(4, 8))
 
         row += 1
-        ttk.Button(
-            panel,
+        tk.Button(
+            parent,
             text="Clear Form",
             command=self._clear_form,
-        ).grid(row=row, column=0, sticky="ew")
+            font=("Segoe UI", 10),
+            bg="#e2e8f0",
+            fg="#0f172a",
+            activebackground="#cbd5e1",
+            relief="flat",
+            bd=0,
+            padx=12,
+            pady=10,
+            cursor="hand2",
+        ).grid(row=row, column=0, sticky="ew", padx=18, pady=(0, 16))
 
-    def _build_right_panel(self, parent: ttk.Frame) -> None:
-        container = ttk.Frame(parent, style="Card.TFrame", padding=20)
-        container.grid(row=0, column=1, sticky="nsew")
-        container.columnconfigure(0, weight=1)
-        container.rowconfigure(2, weight=1)
+    def _build_right_panel(self, parent: tk.Frame) -> None:
+        parent.grid_columnconfigure(0, weight=1)
+        parent.grid_rowconfigure(4, weight=1)
 
-        ttk.Label(
-            container,
+        tk.Label(
+            parent,
             text="User Accounts",
-            style="PageTitle.TLabel",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+            font=("Segoe UI", 18, "bold"),
+            bg=self.CARD_BG,
+            fg=self.TITLE_COLOR,
+        ).grid(row=0, column=0, sticky="w", padx=18, pady=(18, 12))
 
-        controls = ttk.Frame(container)
-        controls.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        controls.columnconfigure(8, weight=1)
+        filter_row = tk.Frame(parent, bg=self.CARD_BG)
+        filter_row.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
+        filter_row.grid_columnconfigure(10, weight=1)
 
-        ttk.Label(controls, text="Filter:", style="Body.TLabel").grid(row=0, column=0, padx=(0, 6))
+        tk.Label(
+            filter_row,
+            text="Filter:",
+            font=("Segoe UI", 10),
+            bg=self.CARD_BG,
+            fg=self.BODY_COLOR,
+        ).grid(row=0, column=0, padx=(0, 6))
+
         ttk.Combobox(
-            controls,
+            filter_row,
             textvariable=self.filter_var,
             values=["ALL", "ACTIVE", "INACTIVE"],
             state="readonly",
             width=12,
         ).grid(row=0, column=1, padx=(0, 8))
 
-        ttk.Button(
-            controls,
+        tk.Button(
+            filter_row,
             text="Apply",
             command=self._apply_filter,
-        ).grid(row=0, column=2, padx=(0, 12))
+            font=("Segoe UI", 10, "bold"),
+            bg="#e2e8f0",
+            fg="#0f172a",
+            activebackground="#cbd5e1",
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=8,
+            cursor="hand2",
+        ).grid(row=0, column=2, padx=(0, 8))
 
-        ttk.Label(controls, text="Selected User ID:", style="Body.TLabel").grid(row=0, column=3, padx=(0, 6))
-        ttk.Entry(
-            controls,
-            textvariable=self.selected_user_id_var,
-            state="readonly",
-            width=10,
-        ).grid(row=0, column=4, padx=(0, 8))
-
-        ttk.Label(controls, text="Username:", style="Body.TLabel").grid(row=0, column=5, padx=(0, 6))
-        ttk.Entry(
-            controls,
-            textvariable=self.selected_username_var,
-            state="readonly",
-            width=18,
-        ).grid(row=0, column=6, padx=(0, 12))
-
-        ttk.Button(
-            controls,
-            text="Activate Selected",
-            command=self._activate_selected,
-        ).grid(row=0, column=7, padx=(0, 8))
-
-        ttk.Button(
-            controls,
-            text="Deactivate Selected",
-            command=self._deactivate_selected,
-        ).grid(row=0, column=8, sticky="w", padx=(0, 8))
-
-        ttk.Button(
-            controls,
+        tk.Button(
+            filter_row,
             text="Refresh",
             command=self._load_all_users,
-        ).grid(row=0, column=9, sticky="e")
+            font=("Segoe UI", 10, "bold"),
+            bg="#e2e8f0",
+            fg="#0f172a",
+            activebackground="#cbd5e1",
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=8,
+            cursor="hand2",
+        ).grid(row=0, column=3, padx=(0, 8))
+
+        selected_row = tk.Frame(parent, bg=self.CARD_BG)
+        selected_row.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 10))
+
+        tk.Label(
+            selected_row,
+            text="Selected User ID:",
+            font=("Segoe UI", 10),
+            bg=self.CARD_BG,
+            fg=self.BODY_COLOR,
+        ).grid(row=0, column=0, padx=(0, 6))
+
+        tk.Entry(
+            selected_row,
+            textvariable=self.selected_user_id_var,
+            state="readonly",
+            font=("Segoe UI", 10),
+            relief="solid",
+            bd=1,
+            width=10,
+        ).grid(row=0, column=1, padx=(0, 10))
+
+        tk.Label(
+            selected_row,
+            text="Username:",
+            font=("Segoe UI", 10),
+            bg=self.CARD_BG,
+            fg=self.BODY_COLOR,
+        ).grid(row=0, column=2, padx=(0, 6))
+
+        tk.Entry(
+            selected_row,
+            textvariable=self.selected_username_var,
+            state="readonly",
+            font=("Segoe UI", 10),
+            relief="solid",
+            bd=1,
+            width=18,
+        ).grid(row=0, column=3, padx=(0, 10))
+
+        tk.Label(
+            selected_row,
+            text="Status:",
+            font=("Segoe UI", 10),
+            bg=self.CARD_BG,
+            fg=self.BODY_COLOR,
+        ).grid(row=0, column=4, padx=(0, 6))
+
+        tk.Entry(
+            selected_row,
+            textvariable=self.selected_status_var,
+            state="readonly",
+            font=("Segoe UI", 10),
+            relief="solid",
+            bd=1,
+            width=10,
+        ).grid(row=0, column=5, padx=(0, 10))
+
+        action_row = tk.Frame(parent, bg=self.CARD_BG)
+        action_row.grid(row=3, column=0, sticky="w", padx=18, pady=(0, 12))
+
+        self.activate_button = tk.Button(
+            action_row,
+            text="Activate User",
+            command=self._activate_selected_user,
+            font=("Segoe UI", 10, "bold"),
+            bg="#2563eb",
+            fg="white",
+            activebackground="#1d4ed8",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            padx=14,
+            pady=8,
+            cursor="hand2",
+        )
+        self.activate_button.grid(row=0, column=0, padx=(0, 10))
+
+        self.deactivate_button = tk.Button(
+            action_row,
+            text="Deactivate User",
+            command=self._deactivate_selected_user,
+            font=("Segoe UI", 10, "bold"),
+            bg="#dc2626",
+            fg="white",
+            activebackground="#b91c1c",
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            padx=14,
+            pady=8,
+            cursor="hand2",
+        )
+        self.deactivate_button.grid(row=0, column=1)
+
+        table_frame = tk.Frame(parent, bg=self.CARD_BG)
+        table_frame.grid(row=4, column=0, sticky="nsew", padx=18, pady=(0, 18))
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(0, weight=1)
 
         columns = (
             "id",
@@ -226,12 +327,12 @@ class UsersPage(ttk.Frame):
         )
 
         self.tree = ttk.Treeview(
-            container,
+            table_frame,
             columns=columns,
             show="headings",
             height=18,
         )
-        self.tree.grid(row=2, column=0, sticky="nsew")
+        self.tree.grid(row=0, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
         headings = {
@@ -246,12 +347,12 @@ class UsersPage(ttk.Frame):
 
         widths = {
             "id": 70,
-            "username": 120,
-            "email": 180,
-            "role_code": 90,
-            "is_active": 80,
-            "first_name": 120,
-            "last_name": 120,
+            "username": 140,
+            "email": 200,
+            "role_code": 100,
+            "is_active": 90,
+            "first_name": 140,
+            "last_name": 140,
         }
 
         for col in columns:
@@ -259,20 +360,22 @@ class UsersPage(ttk.Frame):
             self.tree.column(col, width=widths[col], anchor="w")
 
         scrollbar = ttk.Scrollbar(
-            container,
+            table_frame,
             orient="vertical",
             command=self.tree.yview,
         )
-        scrollbar.grid(row=2, column=1, sticky="ns")
+        scrollbar.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=scrollbar.set)
 
-    def _add_label(self, parent: ttk.Frame, row: int, text: str) -> None:
-        ttk.Label(parent, text=text, style="Body.TLabel").grid(
-            row=row,
-            column=0,
-            sticky="w",
-            pady=(0, 4),
-        )
+    def _add_label(self, parent: tk.Frame, row: int, text: str, required: bool = False) -> None:
+        label_text = f"{text} *" if required else text
+        tk.Label(
+            parent,
+            text=label_text,
+            font=("Segoe UI", 10),
+            bg=self.CARD_BG,
+            fg=self.BODY_COLOR,
+        ).grid(row=row, column=0, sticky="w", padx=18, pady=(0, 4))
 
     def _register_staff(self) -> None:
         response = self.user_controller.register_staff(
@@ -291,7 +394,7 @@ class UsersPage(ttk.Frame):
 
         messagebox.showinfo(
             "Success",
-            response.message + "\n\nActivate the account from this page when ready.",
+            response.message + "\n\nUse Activate User to enable the account when ready.",
         )
         self._clear_form()
         self._load_all_users()
@@ -360,10 +463,18 @@ class UsersPage(ttk.Frame):
                 ),
             )
 
+        self.selected_user_id_var.set("")
+        self.selected_username_var.set("")
+        self.selected_status_var.set("")
+        self._refresh_action_buttons()
+
     def _on_row_selected(self, event=None) -> None:
         selected = self.tree.focus()
         if not selected:
-            return
+            selection = self.tree.selection()
+            if not selection:
+                return
+            selected = selection[0]
 
         values = self.tree.item(selected, "values")
         if not values:
@@ -371,14 +482,30 @@ class UsersPage(ttk.Frame):
 
         self.selected_user_id_var.set(str(values[0]))
         self.selected_username_var.set(str(values[1]))
+        self.selected_status_var.set(str(values[4]))
+        self._refresh_action_buttons()
 
-    def _activate_selected(self) -> None:
+    def _refresh_action_buttons(self) -> None:
+        status = self.selected_status_var.get().strip().lower()
+        has_user = bool(self.selected_user_id_var.get().strip())
+
+        if not has_user:
+            self.activate_button.configure(state="disabled")
+            self.deactivate_button.configure(state="disabled")
+            return
+
+        if status == "yes":
+            self.activate_button.configure(state="disabled")
+            self.deactivate_button.configure(state="normal")
+        else:
+            self.activate_button.configure(state="normal")
+            self.deactivate_button.configure(state="disabled")
+
+    def _activate_selected_user(self) -> None:
         user_id = self.selected_user_id_var.get().strip()
+
         if not user_id:
-            messagebox.showwarning(
-                "Selection Required",
-                "Select a user row first.",
-            )
+            messagebox.showwarning("Selection Required", "Select a user row first.")
             return
 
         response = self.user_controller.activate_user(int(user_id))
@@ -390,13 +517,11 @@ class UsersPage(ttk.Frame):
         messagebox.showinfo("Success", response.message)
         self._apply_filter()
 
-    def _deactivate_selected(self) -> None:
+    def _deactivate_selected_user(self) -> None:
         user_id = self.selected_user_id_var.get().strip()
+
         if not user_id:
-            messagebox.showwarning(
-                "Selection Required",
-                "Select a user row first.",
-            )
+            messagebox.showwarning("Selection Required", "Select a user row first.")
             return
 
         response = self.user_controller.deactivate_user(int(user_id))
@@ -409,7 +534,10 @@ class UsersPage(ttk.Frame):
         self._apply_filter()
 
     def on_show(self) -> None:
+        self._build_sidebar()
         self.filter_var.set("ALL")
         self.selected_user_id_var.set("")
         self.selected_username_var.set("")
+        self.selected_status_var.set("")
         self._load_all_users()
+        self._refresh_action_buttons()

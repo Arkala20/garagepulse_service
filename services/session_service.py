@@ -59,14 +59,23 @@ class SessionService:
 
     @classmethod
     def is_owner(cls) -> bool:
+        """
+        Return True if current user is OWNER.
+        """
         return cls.get_role_code() == "OWNER"
 
     @classmethod
     def is_admin(cls) -> bool:
+        """
+        Return True if current user is ADMIN.
+        """
         return cls.get_role_code() == "ADMIN"
 
     @classmethod
     def is_staff(cls) -> bool:
+        """
+        Return True if current user is STAFF.
+        """
         return cls.get_role_code() == "STAFF"
 
     @classmethod
@@ -75,7 +84,8 @@ class SessionService:
         Check whether the current user has one of the given roles.
         """
         role_code = cls.get_role_code()
-        return role_code in roles if role_code else False
+        normalized_roles = {str(role).strip().upper() for role in roles if role}
+        return role_code in normalized_roles if role_code else False
 
     @classmethod
     def require_authentication(cls) -> None:
@@ -94,8 +104,31 @@ class SessionService:
         """
         cls.require_authentication()
 
-        if not cls.has_role(*roles):
-            allowed = ", ".join(roles)
+        if not roles:
+            raise AuthorizationError("Access denied. No roles were provided.")
+
+        normalized_roles = tuple(
+            str(role).strip().upper() for role in roles if role
+        )
+
+        if not cls.has_role(*normalized_roles):
+            allowed = ", ".join(normalized_roles)
             raise AuthorizationError(
                 f"Access denied. Required role(s): {allowed}."
             )
+
+    @classmethod
+    def require_staff_or_above(cls) -> None:
+        """
+        Allow STAFF, ADMIN, or OWNER.
+        Useful for normal operational pages like work orders.
+        """
+        cls.require_role("OWNER", "ADMIN", "STAFF")
+
+    @classmethod
+    def require_admin_or_owner(cls) -> None:
+        """
+        Allow only ADMIN or OWNER.
+        Useful for restricted management actions.
+        """
+        cls.require_role("OWNER", "ADMIN")

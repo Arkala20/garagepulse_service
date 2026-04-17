@@ -2,13 +2,7 @@
 services/notification_service.py
 
 Notification service for GaragePulse.
-Handles notification creation, retrieval, delivery status updates,
-and real email sending for EMAIL channel notifications.
-
-Professor alignment:
-- Notification list should show customer name
-- Clicking a notification should open full details
-- Supports email/SMS delivery status tracking
+Email-only real-time notification sending.
 """
 
 from __future__ import annotations
@@ -16,10 +10,6 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from config.constants import (
-    NOTIFICATION_CHANNEL_LIST,
-    NOTIFICATION_DELIVERY_STATUS_LIST,
-)
 from repositories.customer_repository import CustomerRepository
 from repositories.notification_repository import NotificationRepository
 from repositories.work_order_repository import WorkOrderRepository
@@ -53,45 +43,24 @@ class NotificationService:
         subject: Optional[str] = None,
         sent_to: Optional[str] = None,
     ) -> ServiceResponse:
-        """
-        Create a notification record linked to a work order and customer.
-
-        For EMAIL channel:
-        - tries to send real email immediately
-        - stores delivery result as SENT or FAILED
-
-        For SMS channel:
-        - currently stores record only
-        - real SMS provider integration can be added later
-        """
         try:
             SessionService.require_authentication()
 
-            channel = (channel or "").strip().upper()
-            subject = (subject or "").strip() or None
             message_body = (message_body or "").strip()
+            subject = (subject or "").strip() or None
             sent_to = (sent_to or "").strip() or None
 
             Validators.require(message_body, "Message body")
 
-            if channel not in NOTIFICATION_CHANNEL_LIST:
-                return ServiceResponse.error_response(
-                    message="Invalid notification channel."
-                )
-
             customer = self.customer_repo.get_by_id(customer_id)
             if not customer or not customer.get("is_active"):
-                return ServiceResponse.error_response(
-                    message="Customer not found."
-                )
+                return ServiceResponse.error_response(message="Customer not found.")
 
             work_order = self.work_order_repo.get_by_id(work_order_id)
             if not work_order:
-                return ServiceResponse.error_response(
-                    message="Work order not found."
-                )
+                return ServiceResponse.error_response(message="Work order not found.")
 
-            if work_order["customer_id"] != customer_id:
+            if int(work_order["customer_id"]) != int(customer_id):
                 return ServiceResponse.error_response(
                     message="Selected work order does not belong to the selected customer."
                 )
@@ -99,80 +68,60 @@ class NotificationService:
             current_user = SessionService.get_current_user()
             actor_id = current_user.get("id") if current_user else None
 
-            customer_email = customer.get("email")
+            customer_email = sent_to or (customer.get("email") or "").strip()
+
             delivery_status = "PENDING"
             provider_status = None
             error_message = None
-            external_reference = None
 
-            # Determine recipient if not manually passed
-            if not sent_to and channel == "EMAIL":
-                sent_to = customer_email
+            if not customer_email:
+                delivery_status = "FAILED"
+                provider_status = "EMAIL_NOT_FOUND"
+                error_message = "Customer does not have an email address."
+            else:
+                send_response = self.email_service.send_email(
+                    to_email=customer_email,
+                    subject=subject or "GaragePulse Notification",
+                    body=message_body,
+                )
 
-            # Real email sending
-            if channel == "EMAIL":
-                if not customer_email:
-                    delivery_status = "FAILED"
-                    error_message = "Customer does not have an email address."
+                if send_response.success:
+                    delivery_status = "SENT"
+                    provider_status = "SMTP_SUCCESS"
                 else:
-                    email_response = self.email_service.send_email(
-                        to_email=customer_email,
-                        subject=subject or "GaragePulse Notification",
-                        body=message_body,
-                    )
-
-                    if email_response.success:
-                        delivery_status = "SENT"
-                        provider_status = "SMTP_SUCCESS"
-                    else:
-                        delivery_status = "FAILED"
-                        provider_status = "SMTP_FAILED"
-                        error_message = email_response.message
-
-            # SMS placeholder
-            elif channel == "SMS":
-                delivery_status = "PENDING"
-                provider_status = "SMS_PROVIDER_NOT_CONFIGURED"
+                    delivery_status = "FAILED"
+                    provider_status = "SMTP_FAILED"
+                    error_message = send_response.message
 
             notification_id = self.notification_repo.create_notification(
                 {
                     "work_order_id": work_order_id,
                     "customer_id": customer_id,
-                    "channel": channel,
+                    "channel": "EMAIL",
                     "subject": subject,
                     "message_body": message_body,
                     "delivery_status": delivery_status,
                     "provider_status": provider_status,
                     "error_message": error_message,
-                    "external_reference": external_reference,
-                    "sent_to": sent_to,
+                    "external_reference": None,
+                    "sent_to": customer_email,
                     "created_by": actor_id,
                 }
             )
 
             logger.info(
-                "Notification created: id=%s, work_order_id=%s, channel=%s, status=%s",
+                "Notification created: id=%s, status=%s",
                 notification_id,
-                work_order_id,
-                channel,
                 delivery_status,
             )
 
-            if channel == "EMAIL":
-                if delivery_status == "SENT":
-                    message = "Notification created and email sent successfully."
-                else:
-                    message = f"Notification created, but email sending failed: {error_message}"
-            elif channel == "SMS":
-                message = (
-                    "Notification record created successfully. "
-                    "Real SMS sending is not configured yet."
-                )
+            if delivery_status == "SENT":
+                msg = "Email sent successfully."
             else:
-                message = "Notification created successfully."
+                msg = f"Notification created, but email sending failed: {error_message}"
 
             return ServiceResponse.success_response(
-                message=message,
+                message=msg,
                 data={
                     "notification_id": notification_id,
                     "delivery_status": delivery_status,
@@ -182,17 +131,12 @@ class NotificationService:
             )
 
         except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
         except Exception as exc:
             logger.exception("Failed to create notification: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
 
     def get_notification(self, notification_id: int) -> ServiceResponse:
-        """
-        Get a single notification with full details.
-        Used when a user clicks a notification in the UI.
-        """
         try:
             SessionService.require_authentication()
 
@@ -208,16 +152,12 @@ class NotificationService:
             )
 
         except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
         except Exception as exc:
             logger.exception("Failed to retrieve notification: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
 
     def get_all_notifications(self) -> ServiceResponse:
-        """
-        Get notification list for UI.
-        """
         try:
             SessionService.require_authentication()
 
@@ -229,64 +169,9 @@ class NotificationService:
             )
 
         except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
         except Exception as exc:
             logger.exception("Failed to retrieve notifications: %s", exc)
-            return ServiceResponse.error_response(message=str(exc))
-
-    def get_notifications_by_work_order(self, work_order_id: int) -> ServiceResponse:
-        """
-        Get all notifications linked to a work order.
-        """
-        try:
-            SessionService.require_authentication()
-
-            work_order = self.work_order_repo.get_by_id(work_order_id)
-            if not work_order:
-                return ServiceResponse.error_response(
-                    message="Work order not found."
-                )
-
-            notifications = self.notification_repo.get_by_work_order_id(work_order_id)
-
-            return ServiceResponse.success_response(
-                message="Work order notifications retrieved successfully.",
-                data=notifications,
-            )
-
-        except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
-            return ServiceResponse.error_response(message=str(exc))
-        except Exception as exc:
-            logger.exception("Failed to retrieve work order notifications: %s", exc)
-            return ServiceResponse.error_response(message=str(exc))
-
-    def get_notifications_by_customer(self, customer_id: int) -> ServiceResponse:
-        """
-        Get all notifications linked to a customer.
-        """
-        try:
-            SessionService.require_authentication()
-
-            customer = self.customer_repo.get_by_id(customer_id)
-            if not customer or not customer.get("is_active"):
-                return ServiceResponse.error_response(
-                    message="Customer not found."
-                )
-
-            notifications = self.notification_repo.get_by_customer_id(customer_id)
-
-            return ServiceResponse.success_response(
-                message="Customer notifications retrieved successfully.",
-                data=notifications,
-            )
-
-        except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
-            return ServiceResponse.error_response(message=str(exc))
-        except Exception as exc:
-            logger.exception("Failed to retrieve customer notifications: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
 
     def update_delivery_status(
@@ -297,27 +182,12 @@ class NotificationService:
         error_message: Optional[str] = None,
         external_reference: Optional[str] = None,
     ) -> ServiceResponse:
-        """
-        Update notification delivery status and provider response details.
-        """
         try:
             SessionService.require_authentication()
 
-            delivery_status = (delivery_status or "").strip().upper()
-            provider_status = (provider_status or "").strip() or None
-            error_message = (error_message or "").strip() or None
-            external_reference = (external_reference or "").strip() or None
-
-            if delivery_status not in NOTIFICATION_DELIVERY_STATUS_LIST:
-                return ServiceResponse.error_response(
-                    message="Invalid delivery status."
-                )
-
             existing = self.notification_repo.get_by_id(notification_id)
             if not existing:
-                return ServiceResponse.error_response(
-                    message="Notification not found."
-                )
+                return ServiceResponse.error_response(message="Notification not found.")
 
             self.notification_repo.update_delivery_status(
                 notification_id=notification_id,
@@ -327,40 +197,12 @@ class NotificationService:
                 external_reference=external_reference,
             )
 
-            logger.info(
-                "Notification delivery status updated: id=%s, status=%s",
-                notification_id,
-                delivery_status,
-            )
-
             return ServiceResponse.success_response(
                 message="Notification delivery status updated successfully."
             )
 
         except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
             return ServiceResponse.error_response(message=str(exc))
         except Exception as exc:
-            logger.exception("Failed to update notification delivery status: %s", exc)
-            return ServiceResponse.error_response(message=str(exc))
-
-    def get_failed_notifications(self) -> ServiceResponse:
-        """
-        Get all failed notifications.
-        """
-        try:
-            SessionService.require_authentication()
-
-            notifications = self.notification_repo.get_by_delivery_status("FAILED")
-
-            return ServiceResponse.success_response(
-                message="Failed notifications retrieved successfully.",
-                data=notifications,
-            )
-
-        except (AuthenticationError, AuthorizationError) as exc:
-            logger.warning("Authentication/authorization failed: %s", exc)
-            return ServiceResponse.error_response(message=str(exc))
-        except Exception as exc:
-            logger.exception("Failed to retrieve failed notifications: %s", exc)
+            logger.exception("Failed to update delivery status: %s", exc)
             return ServiceResponse.error_response(message=str(exc))

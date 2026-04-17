@@ -3,7 +3,6 @@ controllers/customer_controller.py
 
 Customer controller for GaragePulse.
 Acts as the bridge between UI and CustomerService.
-Handles customer creation, updates, search, and retrieval.
 """
 
 from __future__ import annotations
@@ -38,11 +37,6 @@ class CustomerController:
         postal_code: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> ServiceResponse:
-        """
-        Create a new customer.
-        """
-        logger.info("Creating customer name=%s phone=%s", full_name, phone)
-
         return self.customer_service.create_customer(
             full_name=full_name,
             phone=phone,
@@ -68,11 +62,6 @@ class CustomerController:
         postal_code: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> ServiceResponse:
-        """
-        Update an existing customer.
-        """
-        logger.info("Updating customer id=%s", customer_id)
-
         return self.customer_service.update_customer(
             customer_id=customer_id,
             full_name=full_name,
@@ -86,37 +75,17 @@ class CustomerController:
             notes=notes,
         )
 
+    def search_customers(self, search_text: str) -> ServiceResponse:
+        return self.customer_service.search_customers(search_text)
+
     def search_by_phone(self, phone_fragment: str) -> ServiceResponse:
-        """
-        Search customers by phone number.
-
-        Professor requirement:
-        Customers search by phone.
-        """
-        logger.debug("Searching customers by phone fragment=%s", phone_fragment)
-
         return self.customer_service.search_by_phone(phone_fragment)
 
     def get_customer(self, customer_id: int) -> ServiceResponse:
-        """
-        Retrieve a specific customer.
-        """
-        logger.debug("Fetching customer id=%s", customer_id)
-
         return self.customer_service.get_customer(customer_id)
 
     def get_all_customers(self) -> ServiceResponse:
-        """
-        Retrieve all active customers.
-        """
-        logger.debug("Fetching all customers")
-
         return self.customer_service.get_all_customers()
 
     def deactivate_customer(self, customer_id: int) -> ServiceResponse:
-        """
-        Deactivate a customer record.
-        """
-        logger.info("Deactivating customer id=%s", customer_id)
-
         return self.customer_service.deactivate_customer(customer_id)

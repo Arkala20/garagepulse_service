@@ -9,7 +9,6 @@ import os
 from dotenv import load_dotenv
 
 
-# Load environment variables from .env file
 load_dotenv()
 
 
@@ -63,6 +62,16 @@ class Settings:
     EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "")
     SMS_PROVIDER: str = os.getenv("SMS_PROVIDER", "")
 
+    # SMTP settings
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", 587))
+    SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "True") == "True"
+    SMTP_USE_SSL: bool = os.getenv("SMTP_USE_SSL", "False") == "True"
+    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "")
+    SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "GaragePulse")
+
     # ============================================
     # Feature Flags
     # ============================================
@@ -76,7 +85,7 @@ class Settings:
     # ============================================
     @property
     def DATABASE_CONFIG(self) -> dict:
-        """Return DB config as dictionary (used by connection layer)."""
+        """Return DB config as dictionary."""
         return {
             "host": self.DB_HOST,
             "port": self.DB_PORT,
@@ -94,5 +103,4 @@ class Settings:
         return self.APP_ENV.lower() == "development"
 
 
-# Singleton instance to use across project
 settings = Settings()
