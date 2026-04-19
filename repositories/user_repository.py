@@ -21,20 +21,28 @@ class UserRepository(BaseRepository):
 
     def get_by_email(self, email: str) -> Optional[Dict]:
         query = """
-        SELECT *
-        FROM users
-        WHERE email = %s
-          AND is_deleted = 0
+        SELECT
+            u.*,
+            r.role_name,
+            r.role_code
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        WHERE LOWER(u.email) = LOWER(%s)
+          AND u.is_deleted = 0
         LIMIT 1
         """
         return DatabaseManager.fetch_one(query, (email,))
 
     def get_by_username(self, username: str) -> Optional[Dict]:
         query = """
-        SELECT *
-        FROM users
-        WHERE username = %s
-          AND is_deleted = 0
+        SELECT
+            u.*,
+            r.role_name,
+            r.role_code
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        WHERE LOWER(u.username) = LOWER(%s)
+          AND u.is_deleted = 0
         LIMIT 1
         """
         return DatabaseManager.fetch_one(query, (username,))
@@ -42,15 +50,37 @@ class UserRepository(BaseRepository):
     def get_by_email_or_username(self, identifier: str) -> Optional[Dict]:
         """
         Supports login using email OR username.
+        Includes role details for authorization and password reset logic.
         """
         query = """
-        SELECT *
-        FROM users
-        WHERE (email = %s OR username = %s)
-          AND is_deleted = 0
+        SELECT
+            u.*,
+            r.role_name,
+            r.role_code
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        WHERE (LOWER(u.email) = LOWER(%s) OR LOWER(u.username) = LOWER(%s))
+          AND u.is_deleted = 0
         LIMIT 1
         """
         return DatabaseManager.fetch_one(query, (identifier, identifier))
+
+    def get_by_id(self, user_id: int) -> Optional[Dict]:
+        """
+        Get a single user with role details by ID.
+        """
+        query = """
+        SELECT
+            u.*,
+            r.role_name,
+            r.role_code
+        FROM users u
+        JOIN roles r ON u.role_id = r.id
+        WHERE u.id = %s
+          AND u.is_deleted = 0
+        LIMIT 1
+        """
+        return DatabaseManager.fetch_one(query, (user_id,))
 
     def create_user(self, data: Dict) -> int:
         """
@@ -102,7 +132,7 @@ class UserRepository(BaseRepository):
         query = """
         SELECT id
         FROM users
-        WHERE email = %s
+        WHERE LOWER(email) = LOWER(%s)
           AND is_deleted = 0
         LIMIT 1
         """
@@ -113,7 +143,7 @@ class UserRepository(BaseRepository):
         query = """
         SELECT id
         FROM users
-        WHERE username = %s
+        WHERE LOWER(username) = LOWER(%s)
           AND is_deleted = 0
         LIMIT 1
         """
@@ -123,9 +153,6 @@ class UserRepository(BaseRepository):
     def get_all_staff(self) -> List[Dict]:
         """
         Return non-deleted operational users with role details.
-
-        Includes OWNER, ADMIN, and STAFF so the active account page
-        can manage all application users cleanly.
         """
         query = """
         SELECT

@@ -15,6 +15,8 @@ Updates:
 - keeps multi-vehicle-per-customer behavior
 - fixes STAFF access issue on page load
 - fixes row selection work order loading bug
+- removed Plate Number from records table
+- added Vehicle and Issue Description to records table
 """
 
 from __future__ import annotations
@@ -60,7 +62,6 @@ class WorkOrdersPage(AppShell):
         self.vehicle_var = tk.StringVar()
         self.staff_var = tk.StringVar()
         self.issue_var = tk.StringVar()
-
 
         self.status_var = tk.StringVar(value="NEW")
         self.status_note_var = tk.StringVar()
@@ -346,9 +347,6 @@ class WorkOrdersPage(AppShell):
         self.issue_entry = self._make_text_field(card, row, self.issue_var)
 
         row += 1
-
-
-        row += 1
         self._make_primary_button(card, "Create Work Order", self._create_work_order, row, pady=(0, 10))
 
         row += 1
@@ -473,8 +471,8 @@ class WorkOrdersPage(AppShell):
         columns = (
             "work_order_id",
             "customer_name",
-            "plate_number",
-            "assigned_staff",
+            "vehicle",
+            "issue_description",
             "current_status",
             "labor_cost",
             "parts_total",
@@ -493,8 +491,8 @@ class WorkOrdersPage(AppShell):
         headings = {
             "work_order_id": "Work Order ID",
             "customer_name": "Customer",
-            "plate_number": "Plate Number",
-            "assigned_staff": "Assigned Staff",
+            "vehicle": "Vehicle",
+            "issue_description": "Issue Description",
             "current_status": "Status",
             "labor_cost": "Labor",
             "parts_total": "Parts",
@@ -502,11 +500,11 @@ class WorkOrdersPage(AppShell):
         }
 
         widths = {
-            "work_order_id": 160,
+            "work_order_id": 150,
             "customer_name": 170,
-            "plate_number": 140,
-            "assigned_staff": 150,
-            "current_status": 120,
+            "vehicle": 180,
+            "issue_description": 260,
+            "current_status": 110,
             "labor_cost": 90,
             "parts_total": 90,
             "subtotal": 100,
@@ -689,6 +687,7 @@ class WorkOrdersPage(AppShell):
         self.selected_work_order_code_var.set(str(work_order.get("work_order_id", "")))
         self.status_var.set(str(work_order.get("current_status", "") or "NEW"))
         self.labor_cost_var.set(str(work_order.get("labor_cost", "") or ""))
+        self.issue_var.set(str(work_order.get("issue_description", "") or ""))
         self.loaded_work_order_label.config(
             text=f"Editing work order: {work_order.get('work_order_id', '')}"
         )
@@ -740,6 +739,25 @@ class WorkOrdersPage(AppShell):
         self._load_staff()
         self._load_all_work_orders()
 
+    def _format_vehicle_display_from_row(self, row: dict) -> str:
+        vehicle_text = str(row.get("vehicle", "") or "").strip()
+        if vehicle_text:
+            return vehicle_text
+
+        year_val = str(row.get("vehicle_year") or row.get("year") or "").strip()
+        make_val = str(row.get("make") or "").strip()
+        model_val = str(row.get("model") or "").strip()
+
+        combined = " ".join(part for part in [year_val, make_val, model_val] if part).strip()
+        if combined:
+            return combined
+
+        plate_number = str(row.get("plate_number", "") or "").strip()
+        if plate_number:
+            return plate_number
+
+        return ""
+
     def _load_all_work_orders(self) -> None:
         response = self.work_order_controller.get_all_work_orders()
 
@@ -751,6 +769,8 @@ class WorkOrdersPage(AppShell):
 
         for row in response.data or []:
             internal_id = str(row.get("id", ""))
+            vehicle_display = self._format_vehicle_display_from_row(row)
+
             self.tree.insert(
                 "",
                 "end",
@@ -758,8 +778,8 @@ class WorkOrdersPage(AppShell):
                 values=(
                     row.get("work_order_id", ""),
                     row.get("customer_name", ""),
-                    row.get("plate_number", ""),
-                    row.get("assigned_staff", ""),
+                    vehicle_display,
+                    row.get("issue_description", ""),
                     row.get("current_status", ""),
                     row.get("labor_cost", 0),
                     row.get("parts_total", 0),
@@ -788,6 +808,7 @@ class WorkOrdersPage(AppShell):
 
         self.selected_work_order_id_var.set(str(selected))
         self.selected_work_order_code_var.set(work_order_code)
+        self.issue_var.set(str(values[3]))
         self.status_var.set(str(values[4]))
         self.labor_cost_var.set(str(values[5]))
         self.loaded_work_order_label.config(text=f"Editing work order: {work_order_code}")

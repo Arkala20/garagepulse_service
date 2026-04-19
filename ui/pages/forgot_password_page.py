@@ -12,7 +12,6 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -192,14 +191,10 @@ class ForgotPasswordPage(ttk.Frame):
             messagebox.showerror("Error", "An unexpected error occurred while requesting reset.")
             return
 
-        if not response.success:
+        if response.success:
+            messagebox.showinfo("Success", response.message)
+        else:
             messagebox.showerror("Error", response.message)
-            return
-
-        messagebox.showinfo(
-            "Success",
-            "Reset token successfully sent. Please check your email."
-        )
 
     def _go_to_reset_password(self) -> None:
         if "reset_password" not in self.app.pages:

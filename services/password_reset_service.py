@@ -1,5 +1,11 @@
 """
 services/password_reset_service.py
+
+Password reset service for GaragePulse.
+Updated behavior:
+- sends reset token only for real valid active users
+- supports OWNER, ADMIN, and STAFF roles
+- returns actual success only when token is created and email is sent
 """
 
 from __future__ import annotations
@@ -15,36 +21,78 @@ from utils.response import ServiceResponse
 from utils.security import Security
 from utils.validators import Validators
 
-
 logger = logging.getLogger(__name__)
 
 
 class PasswordResetService:
+    """
+    Service responsible for forgot password and reset password flows.
+    """
+
     def __init__(self) -> None:
         self.user_repo = UserRepository()
         self.password_reset_repo = PasswordResetRepository()
         self.email_service = EmailService()
 
     def request_password_reset(self, identifier: str) -> ServiceResponse:
+        """
+        Create a password reset request and send email only for valid active app users.
+        """
         try:
             identifier = (identifier or "").strip()
             Validators.require(identifier, "Email or Username")
 
             user = self.user_repo.get_by_email_or_username(identifier)
+
             if not user:
-                return ServiceResponse.success_response(
-                    message="If an account exists, a reset token has been sent to the registered email."
+                logger.warning(
+                    "PASSWORD RESET REJECTED | identifier=%r | reason=user_not_found",
+                    identifier,
+                )
+                return ServiceResponse.error_response(
+                    message="No user found with that email or username."
                 )
 
             if user.get("is_deleted"):
+                logger.warning(
+                    "PASSWORD RESET REJECTED | user_id=%s | reason=deleted_account",
+                    user.get("id"),
+                )
                 return ServiceResponse.error_response(
-                    message="This account is no longer available."
+                    message="This account is not available for password reset."
+                )
+
+            is_active = user.get("is_active")
+            if is_active in (0, False, "0", "False", "false", "No", "NO"):
+                logger.warning(
+                    "PASSWORD RESET REJECTED | user_id=%s | reason=inactive_account",
+                    user.get("id"),
+                )
+                return ServiceResponse.error_response(
+                    message="This account is inactive."
+                )
+
+            role_code = str(user.get("role_code", "") or "").strip().upper()
+
+            # Allow OWNER, ADMIN, and STAFF
+            if role_code not in {"OWNER", "ADMIN", "STAFF"}:
+                logger.warning(
+                    "PASSWORD RESET REJECTED | user_id=%s | reason=invalid_role | role=%s",
+                    user.get("id"),
+                    role_code,
+                )
+                return ServiceResponse.error_response(
+                    message=f"Password reset is not allowed for role: {role_code or 'UNKNOWN'}."
                 )
 
             user_email = str(user.get("email") or "").strip()
             if not user_email:
+                logger.warning(
+                    "PASSWORD RESET REJECTED | user_id=%s | reason=no_registered_email",
+                    user.get("id"),
+                )
                 return ServiceResponse.error_response(
-                    message="No email is registered for this account."
+                    message="No email address is registered for this user."
                 )
 
             token = Security.generate_token(32)
@@ -98,12 +146,24 @@ class PasswordResetService:
             )
 
             if not email_response.success:
+                logger.error(
+                    "PASSWORD RESET EMAIL FAILED | user_id=%s | error=%s",
+                    user["id"],
+                    email_response.message,
+                )
                 return ServiceResponse.error_response(
                     message=f"Reset token created, but email sending failed: {email_response.message}"
                 )
 
+            logger.info(
+                "PASSWORD RESET SENT | user_id=%s | email=%s | role=%s",
+                user["id"],
+                user_email,
+                role_code,
+            )
+
             return ServiceResponse.success_response(
-                message="If an account exists, a reset token has been sent to the registered email."
+                message="Reset token successfully sent. Please check your email."
             )
 
         except Exception as exc:
@@ -113,6 +173,9 @@ class PasswordResetService:
             )
 
     def validate_reset_token(self, reset_token: str) -> ServiceResponse:
+        """
+        Validate whether a reset token exists, is unused, and is not expired.
+        """
         try:
             reset_token = (reset_token or "").strip()
             Validators.require(reset_token, "Reset token")
@@ -154,6 +217,9 @@ class PasswordResetService:
         new_password: str,
         confirm_password: str,
     ) -> ServiceResponse:
+        """
+        Reset a user's password using a valid token.
+        """
         try:
             reset_token = (reset_token or "").strip()
             new_password = new_password or ""
@@ -197,6 +263,7 @@ class PasswordResetService:
                 )
 
             new_password_hash = Security.hash_password(new_password)
+
             self.user_repo.update_password(
                 reset_request["user_id"],
                 new_password_hash,
