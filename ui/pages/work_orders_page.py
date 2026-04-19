@@ -60,7 +60,7 @@ class WorkOrdersPage(AppShell):
         self.vehicle_var = tk.StringVar()
         self.staff_var = tk.StringVar()
         self.issue_var = tk.StringVar()
-        self.notes_var = tk.StringVar()
+
 
         self.status_var = tk.StringVar(value="NEW")
         self.status_note_var = tk.StringVar()
@@ -346,9 +346,7 @@ class WorkOrdersPage(AppShell):
         self.issue_entry = self._make_text_field(card, row, self.issue_var)
 
         row += 1
-        self._add_label(card, row, "Notes")
-        row += 1
-        self.notes_entry = self._make_text_field(card, row, self.notes_var)
+
 
         row += 1
         self._make_primary_button(card, "Create Work Order", self._create_work_order, row, pady=(0, 10))
@@ -723,7 +721,6 @@ class WorkOrdersPage(AppShell):
             vehicle_id=vehicle_id,
             issue_description=self.issue_var.get().strip(),
             assigned_staff_id=staff_id,
-            notes=self.notes_var.get().strip() or None,
         )
 
         if not response.success:
@@ -732,7 +729,6 @@ class WorkOrdersPage(AppShell):
 
         messagebox.showinfo("Success", response.message)
         self.issue_var.set("")
-        self.notes_var.set("")
         self.customer_search_var.set("")
         self.selected_customer_display_var.set("")
         self.selected_customer_id = None

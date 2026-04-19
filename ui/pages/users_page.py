@@ -34,7 +34,7 @@ class UsersPage(AppShell):
             parent=parent,
             app=app,
             active_page_name="users",
-            page_title="Active Accounts",
+            page_title="Staff Management",
         )
 
         self.user_controller = app.get_controller("user")

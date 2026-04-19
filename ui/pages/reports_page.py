@@ -17,6 +17,10 @@ import tkinter as tk
 from collections import defaultdict
 from datetime import datetime, timedelta
 from tkinter import filedialog, messagebox, ttk
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
@@ -157,7 +161,64 @@ class ReportsPage(AppShell):
         view_combo.bind("<<ComboboxSelected>>", lambda e: self.load_report_data())
 
         self._toolbar_button(bar, "Refresh", 3, self.load_report_data)
-        self._toolbar_button(bar, "Export", 4, self.export_csv)
+        self._toolbar_button(bar, "Export PDF", 4, self.export_pdf)
+
+    def export_pdf(self) -> None:
+        rows = self.current_report_data.get("table_rows", [])
+        columns = self.current_report_data.get("table_columns", [])
+
+        if not rows or not columns:
+            messagebox.showinfo("Export PDF", "No records available to export.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            title="Save Report PDF",
+            defaultextension=".pdf",
+            initialfile=f"garagepulse_reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            filetypes=[("PDF files", "*.pdf")],
+        )
+
+        if not file_path:
+            return
+
+        try:
+            doc = SimpleDocTemplate(file_path, pagesize=letter)
+            styles = getSampleStyleSheet()
+
+            elements = []
+
+            # Title
+            elements.append(Paragraph("GaragePulse Reports", styles["Title"]))
+            elements.append(Spacer(1, 12))
+
+            # Table data
+            table_data = [columns]
+
+            for row in rows:
+                table_data.append([str(row.get(col, "")) for col in columns])
+
+            # Create table
+            table = Table(table_data)
+
+            table.setStyle(
+                TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
+                ])
+            )
+
+            elements.append(table)
+
+            doc.build(elements)
+
+            messagebox.showinfo("Export PDF", f"Report exported successfully.\n\n{file_path}")
+
+        except Exception as exc:
+            messagebox.showerror("Export PDF", f"Failed to export PDF.\n\n{exc}")
 
     def _build_summary_cards(self) -> None:
         row = tk.Frame(self.content, bg=self.CONTENT_BG)
@@ -927,33 +988,7 @@ class ReportsPage(AppShell):
                 values=[row.get(col, "") for col in columns],
             )
 
-    def export_csv(self) -> None:
-        rows = self.current_report_data.get("table_rows", [])
-        columns = self.current_report_data.get("table_columns", [])
 
-        if not rows or not columns:
-            messagebox.showinfo("Export CSV", "No records available to export.")
-            return
-
-        file_path = filedialog.asksaveasfilename(
-            title="Save Report CSV",
-            defaultextension=".csv",
-            initialfile=f"garagepulse_reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            filetypes=[("CSV files", "*.csv")],
-        )
-        if not file_path:
-            return
-
-        try:
-            with open(file_path, "w", newline="", encoding="utf-8") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(columns)
-                for row in rows:
-                    writer.writerow([row.get(col, "") for col in columns])
-
-            messagebox.showinfo("Export CSV", f"Report exported successfully.\n\n{file_path}")
-        except Exception as exc:
-            messagebox.showerror("Export CSV", f"Failed to export CSV.\n\n{exc}")
 
     # ------------------------------------------------------------------
     # NAVIGATION

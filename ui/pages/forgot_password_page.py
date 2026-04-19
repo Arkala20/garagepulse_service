@@ -198,7 +198,7 @@ class ForgotPasswordPage(ttk.Frame):
 
         messagebox.showinfo(
             "Success",
-            "If the account exists, a reset token has been sent to the registered email."
+            "Reset token successfully sent. Please check your email."
         )
 
     def _go_to_reset_password(self) -> None:
