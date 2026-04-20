@@ -34,11 +34,10 @@ class DatabaseConnection:
                     pool_name="garagepulse_pool",
                     pool_size=5,
                     host=settings.DB_HOST,
-                    port=settings.DB_PORT,
+                    port=int(settings.DB_PORT),
                     database=settings.DB_NAME,
                     user=settings.DB_USER,
                     password=settings.DB_PASSWORD,
-                    auth_plugin="mysql_native_password",
                     use_pure=True,
                 )
 

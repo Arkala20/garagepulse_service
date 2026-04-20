@@ -4,6 +4,11 @@ services/work_order_service.py
 Work order business logic for GaragePulse.
 Aligned with schema.sql, corrected status history fields,
 and corrected session exception handling.
+
+Updated:
+- fixed duplicate work_order_id generation
+- allows multiple work orders for same customer/vehicle
+- generates next work order code from latest DB record
 """
 
 from __future__ import annotations
@@ -21,7 +26,6 @@ from repositories.work_order_repository import WorkOrderRepository
 from repositories.work_order_status_repository import WorkOrderStatusRepository
 from services.session_service import SessionService
 from utils.exceptions import AuthenticationError, AuthorizationError
-from utils.id_generator import IDGenerator
 from utils.response import ServiceResponse
 from utils.validators import Validators
 
@@ -44,11 +48,27 @@ class WorkOrderService:
 
     def _generate_next_work_order_code(self) -> str:
         """
-        Generate the next Work Order ID.
+        Generate the next Work Order ID safely from the latest DB value.
+
+        Examples:
+            None         -> WO-000001
+            WO-000037    -> WO-000038
         """
-        existing = self.work_order_repo.get_all_work_orders(limit=100000, offset=0)
-        next_sequence = len(existing) + 1
-        return IDGenerator.generate_work_order_id(next_sequence)
+        last_code = self.work_order_repo.get_last_work_order_code()
+
+        if not last_code:
+            return "WO-000001"
+
+        try:
+            prefix, number_part = str(last_code).strip().split("-")
+            next_number = int(number_part) + 1
+            return f"{prefix}-{next_number:06d}"
+        except (ValueError, IndexError):
+            logger.warning(
+                "Unexpected work order code format found in DB: %s. Falling back to WO-000001",
+                last_code,
+            )
+            return "WO-000001"
 
     def create_work_order(
         self,
@@ -88,6 +108,7 @@ class WorkOrderService:
 
             current_user = SessionService.get_current_user()
             actor_id = current_user.get("id") if current_user else None
+
             work_order_code = self._generate_next_work_order_code()
 
             work_order_id = self.work_order_repo.create_work_order(

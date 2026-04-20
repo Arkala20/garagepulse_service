@@ -18,6 +18,20 @@ class WorkOrderRepository(BaseRepository):
 
     table_name = "work_orders"
 
+    def get_last_work_order_code(self) -> Optional[str]:
+        """
+        Return the latest business work order code from the database.
+        Example: WO-000037
+        """
+        query = """
+        SELECT work_order_id
+        FROM work_orders
+        ORDER BY id DESC
+        LIMIT 1
+        """
+        result = DatabaseManager.fetch_one(query)
+        return result["work_order_id"] if result else None
+
     def get_by_work_order_id(self, work_order_id: str) -> Optional[Dict]:
         """
         Get work order using business ID (WO-000001).
